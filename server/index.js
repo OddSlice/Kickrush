@@ -14,6 +14,7 @@ const io = new Server(httpServer, {
   cors: {
     origin: CLIENT_ORIGIN.split(',').map(s => s.trim()),
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 

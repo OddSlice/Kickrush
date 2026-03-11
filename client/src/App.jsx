@@ -33,11 +33,16 @@ export default function App() {
 
     // Fetch initial player count
     socket.on('connect', () => {
+      console.log('[KickRush] Connected to server');
       socket.emit('getRooms', (data) => {
         if (data && typeof data.totalPlayers === 'number') {
           setTotalPlayers(data.totalPlayers);
         }
       });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[KickRush] Connection error:', err.message);
     });
 
     return () => {
