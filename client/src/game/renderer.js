@@ -40,6 +40,12 @@ const GOAL_POSTS = [
 
 export function createRenderer() {
 
+  const POWERUP_COLORS = {
+    sprintBoost: { fill: 'rgba(245,158,11,0.2)', solid: 'rgba(245,158,11,1)' },
+    powerShot:   { fill: 'rgba(239,68,68,0.2)',  solid: 'rgba(239,68,68,1)' },
+    shield:      { fill: 'rgba(59,130,246,0.2)', solid: 'rgba(59,130,246,1)' },
+  };
+
   // opts: { localPlayerId, celebration, muted }
   function render(ctx, state, canvasW, canvasH, opts = {}) {
     const { localPlayerId, celebration } = opts;
@@ -127,6 +133,13 @@ export function createRenderer() {
       ctx.fill();
     }
 
+    // --- Powerups on pitch ---
+    if (state.powerups) {
+      for (const pu of state.powerups) {
+        drawPowerup(ctx, pu);
+      }
+    }
+
     // --- Ball ---
     const ball = state.ball;
     const ballR = ball.radius || BALL_PROPS.radius;
@@ -148,6 +161,27 @@ export function createRenderer() {
       ctx.ellipse(p.x, p.y + pR * 0.6, pR * 0.9, pR * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      // Active effect outer rings
+      if (p.sprintBoostTimer > 0) {
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (p.shieldActive) {
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (p.powerShotActive) {
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       // Kick ring (amber, when kick is active)
       if (p.kick) {
         ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
@@ -165,6 +199,22 @@ export function createRenderer() {
       ctx.arc(p.x, p.y, pR, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      // Held powerup badge (top-right of player)
+      if (p.heldPowerup) {
+        const badgeX = p.x + 12;
+        const badgeY = p.y - 12;
+        const badgeR = 8;
+        const badgeColor = POWERUP_COLORS[p.heldPowerup];
+        ctx.fillStyle = badgeColor.solid;
+        ctx.beginPath();
+        ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        drawPowerupIcon(ctx, p.heldPowerup, badgeX, badgeY, 8);
+      }
 
       // Name label with pill background
       const name = p.name || '';
@@ -184,29 +234,29 @@ export function createRenderer() {
       ctx.fillStyle = COLORS.text;
       ctx.fillText(name, p.x, p.y - pR - 9);
 
-      // Local player indicator (amber dot below) + stamina bar
+      // Stamina bar (visible to all players, shown when below 100)
+      if (p.stamina != null && p.stamina < 100) {
+        const barW = 30;
+        const barH = 4;
+        const barX = p.x - barW / 2;
+        const barY = p.y + pR + 8;
+        const fill = p.stamina / 100;
+
+        // Dark background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(barX, barY, barW, barH);
+
+        // Fill: amber when healthy, red below 25%
+        ctx.fillStyle = p.stamina < 25 ? '#ef4444' : COLORS.amber;
+        ctx.fillRect(barX, barY, barW * fill, barH);
+      }
+
+      // Local player indicator (amber dot below)
       if (localPlayerId && p.id === localPlayerId) {
         ctx.fillStyle = COLORS.amber;
         ctx.beginPath();
-        ctx.arc(p.x, p.y + pR + 8, 3, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y + pR + 16, 3, 0, Math.PI * 2);
         ctx.fill();
-
-        // Stamina bar (only when below 100)
-        if (p.stamina != null && p.stamina < 100) {
-          const barW = 30;
-          const barH = 4;
-          const barX = p.x - barW / 2;
-          const barY = p.y + pR + 14;
-          const fill = p.stamina / 100;
-
-          // Dark background
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-          ctx.fillRect(barX, barY, barW, barH);
-
-          // Fill: amber when healthy, red below 25%
-          ctx.fillStyle = p.stamina < 25 ? '#ef4444' : COLORS.amber;
-          ctx.fillRect(barX, barY, barW * fill, barH);
-        }
       }
     }
 
@@ -373,6 +423,85 @@ export function createRenderer() {
       ctx.lineTo(FIELD.width, GOAL_Y_MAX);
     }
     ctx.stroke();
+  }
+
+  // ── Powerup rendering ──
+
+  function drawPowerup(ctx, pu) {
+    const col = POWERUP_COLORS[pu.type];
+    if (!col) return;
+
+    // Pulse animation: radius oscillates 20-24 using server pulsePhase
+    const pulse = Math.sin(pu.pulsePhase * 0.05) * 2 + 22; // 20 to 24
+
+    // Outer pulsing ring
+    ctx.strokeStyle = col.solid;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pu.x, pu.y, pulse, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner filled circle
+    ctx.fillStyle = col.fill;
+    ctx.beginPath();
+    ctx.arc(pu.x, pu.y, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner solid border
+    ctx.strokeStyle = col.solid;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pu.x, pu.y, 20, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Icon
+    drawPowerupIcon(ctx, pu.type, pu.x, pu.y, 16);
+  }
+
+  function drawPowerupIcon(ctx, type, cx, cy, size) {
+    const s = size / 16; // Scale factor relative to base 16px
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(s, s);
+    ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = 2 / s; // Consistent line width
+
+    if (type === 'sprintBoost') {
+      // Lightning bolt
+      ctx.beginPath();
+      ctx.moveTo(-3, -8);
+      ctx.lineTo(1, -2);
+      ctx.lineTo(-1, -2);
+      ctx.lineTo(3, 8);
+      ctx.lineTo(-1, 2);
+      ctx.lineTo(1, 2);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === 'powerShot') {
+      // 8-ray burst
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * 2, Math.sin(angle) * 2);
+        ctx.lineTo(Math.cos(angle) * 7, Math.sin(angle) * 7);
+        ctx.stroke();
+      }
+    } else if (type === 'shield') {
+      // Shield outline
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.quadraticCurveTo(7, -5, 7, -1);
+      ctx.quadraticCurveTo(7, 4, 0, 8);
+      ctx.quadraticCurveTo(-7, 4, -7, -1);
+      ctx.quadraticCurveTo(-7, -5, 0, -7);
+      ctx.closePath();
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   // ── Rounded rect helper ──
