@@ -180,11 +180,33 @@ export default function Game({ socket, playerName, roomId, onLeave, onPlayAgain 
   }, [socket, roomId]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100vh' }} className="flex flex-col">
       <canvas
         ref={canvasRef}
-        style={{ display: 'block', width: '100%', height: '100%' }}
+        style={{ display: 'block', width: '100%', flex: '1 1 0%', minHeight: 0 }}
       />
+
+      {/* Powerup legend */}
+      <div
+        className="flex items-center justify-center gap-8 px-5 py-2.5 select-none shrink-0"
+        style={{ background: '#1a1a1a', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#f59e0b' }} />
+          <span className="text-[11px] font-bold text-white/85">Sprint Boost</span>
+          <span className="text-[11px] text-slate-400">· Double speed for 6s</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#ef4444' }} />
+          <span className="text-[11px] font-bold text-white/85">Power Shot</span>
+          <span className="text-[11px] text-slate-400">· Next kick is 3× stronger</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#3b82f6' }} />
+          <span className="text-[11px] font-bold text-white/85">Shield</span>
+          <span className="text-[11px] text-slate-400">· Absorbs one player collision</span>
+        </div>
+      </div>
 
       {/* Mute toggle button */}
       <button

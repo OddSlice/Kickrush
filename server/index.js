@@ -35,6 +35,8 @@ const POWERUP_GOAL_MARGIN = 200;
 const POWERUP_MIN_SPACING = 150;
 const SPRINT_BOOST_DURATION = 360; // 6 seconds at 60Hz
 const SPRINT_BOOST_MULTIPLIER = 2.0;
+const POWER_SHOT_DURATION = 480;   // 8 seconds at 60Hz
+const SHIELD_DURATION = 480;       // 8 seconds at 60Hz
 
 const RED_SPAWNS = [
   { x: 250, y: 240 },
@@ -232,9 +234,11 @@ function activatePowerup(p) {
       break;
     case 'powerShot':
       p.powerShotActive = true;
+      p.powerShotTimer = POWER_SHOT_DURATION;
       break;
     case 'shield':
       p.shieldActive = true;
+      p.shieldTimer = SHIELD_DURATION;
       break;
   }
 }
@@ -243,7 +247,9 @@ function resetPlayerPowerupState(p) {
   p.heldPowerup = null;
   p.sprintBoostTimer = 0;
   p.powerShotActive = false;
+  p.powerShotTimer = 0;
   p.shieldActive = false;
+  p.shieldTimer = 0;
 }
 
 // --- Broadcasting ---
@@ -256,8 +262,8 @@ function buildGameState(room) {
     const pd = { id, x: round1(p.disc.x), y: round1(p.disc.y), team: p.team, name: p.name, kick: p.input.kick, stamina: Math.round(p.stamina) };
     if (p.heldPowerup) pd.heldPowerup = p.heldPowerup;
     if (p.sprintBoostTimer > 0) pd.sprintBoostTimer = p.sprintBoostTimer;
-    if (p.powerShotActive) pd.powerShotActive = true;
-    if (p.shieldActive) pd.shieldActive = true;
+    if (p.powerShotActive) { pd.powerShotActive = true; pd.powerShotTimer = p.powerShotTimer; }
+    if (p.shieldActive) { pd.shieldActive = true; pd.shieldTimer = p.shieldTimer; }
     players.push(pd);
   }
   const powerups = room.powerups.map(pu => ({
@@ -367,6 +373,24 @@ function gameTick(room) {
     // Sprint boost timer countdown
     if (p.sprintBoostTimer > 0) p.sprintBoostTimer--;
 
+    // Power shot expiry timer
+    if (p.powerShotActive && p.powerShotTimer > 0) {
+      p.powerShotTimer--;
+      if (p.powerShotTimer <= 0) {
+        p.powerShotActive = false;
+        p.powerShotTimer = 0;
+      }
+    }
+
+    // Shield expiry timer
+    if (p.shieldActive && p.shieldTimer > 0) {
+      p.shieldTimer--;
+      if (p.shieldTimer <= 0) {
+        p.shieldActive = false;
+        p.shieldTimer = 0;
+      }
+    }
+
     const isMoving = p.input.up || p.input.down || p.input.left || p.input.right;
     const hasBoostedSprint = p.sprintBoostTimer > 0;
     const wantsSprint = p.input.sprint && isMoving;
@@ -376,7 +400,7 @@ function gameTick(room) {
       p.stamina = Math.min(100, p.stamina + 8 / TICK_RATE);
       if (p.sprintLocked && p.stamina >= 20) p.sprintLocked = false;
     } else if (wantsSprint && !p.sprintLocked) {
-      p.stamina = Math.max(0, p.stamina - 15 / TICK_RATE);
+      p.stamina = Math.max(0, p.stamina - 35 / TICK_RATE);
       if (p.stamina <= 0) { p.stamina = 0; p.sprintLocked = true; }
     } else {
       p.stamina = Math.min(100, p.stamina + 8 / TICK_RATE);
@@ -403,7 +427,15 @@ function gameTick(room) {
 
   // Sync powerShotActive and shieldActive back from disc (physics may have cleared them)
   for (const p of room.players.values()) {
+    if (p.powerShotActive && !p.disc.powerShotActive) {
+      // Power shot was consumed by physics (ball contact)
+      p.powerShotTimer = 0;
+    }
     p.powerShotActive = p.disc.powerShotActive;
+    if (p.shieldActive && !p.disc.shieldActive) {
+      // Shield was consumed by physics (player collision)
+      p.shieldTimer = 0;
+    }
     p.shieldActive = p.disc.shieldActive;
   }
 
@@ -456,7 +488,9 @@ function addPlayerToRoom(socket, room, playerName) {
     heldPowerup: null,
     sprintBoostTimer: 0,
     powerShotActive: false,
+    powerShotTimer: 0,
     shieldActive: false,
+    shieldTimer: 0,
   });
 
   socket.join(room.id);

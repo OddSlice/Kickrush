@@ -200,20 +200,55 @@ export function createRenderer() {
       ctx.fill();
       ctx.stroke();
 
-      // Held powerup badge (top-right of player)
-      if (p.heldPowerup) {
-        const badgeX = p.x + 12;
-        const badgeY = p.y - 12;
-        const badgeR = 8;
-        const badgeColor = POWERUP_COLORS[p.heldPowerup];
-        ctx.fillStyle = badgeColor.solid;
-        ctx.beginPath();
-        ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        drawPowerupIcon(ctx, p.heldPowerup, badgeX, badgeY, 8);
+      // Active effect badge (top-right of player)
+      {
+        let effectType = null;
+        let effectTimer = 0;
+        if (p.sprintBoostTimer > 0) {
+          effectType = 'sprintBoost';
+          effectTimer = p.sprintBoostTimer;
+        } else if (p.powerShotActive) {
+          effectType = 'powerShot';
+          effectTimer = p.powerShotTimer || 0;
+        } else if (p.shieldActive) {
+          effectType = 'shield';
+          effectTimer = p.shieldTimer || 0;
+        } else if (p.heldPowerup) {
+          effectType = p.heldPowerup;
+          effectTimer = 0;
+        }
+
+        if (effectType) {
+          const badgeX = p.x + 12;
+          const badgeY = p.y - 12;
+          const badgeR = 8;
+          const badgeColor = POWERUP_COLORS[effectType];
+          const secondsLeft = Math.ceil(effectTimer / 60);
+
+          // Flash when under 3 seconds remaining
+          const flash = secondsLeft > 0 && secondsLeft <= 3;
+          const badgeOpacity = flash ? (Math.sin(Date.now() * 0.01) > 0 ? 1.0 : 0.3) : 1.0;
+
+          ctx.globalAlpha = badgeOpacity;
+          ctx.fillStyle = badgeColor.solid;
+          ctx.beginPath();
+          ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          drawPowerupIcon(ctx, effectType, badgeX, badgeY, 8);
+
+          // Countdown number below badge
+          if (secondsLeft > 0) {
+            ctx.font = `bold 9px ${FONT}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(String(secondsLeft), badgeX, badgeY + badgeR + 1);
+          }
+          ctx.globalAlpha = 1.0;
+        }
       }
 
       // Name label with pill background
